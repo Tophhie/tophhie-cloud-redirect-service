@@ -1,6 +1,5 @@
 import { createConnection, Connection } from "mysql2/promise"
 import { IRedirectIndex, IRedirectLink, IRedirectLinkPublic } from "./interfaces/interfaces";
-import { log } from "node:console";
 
 interface Env {
 	HYPERDRIVE: Hyperdrive;
@@ -13,7 +12,7 @@ export default {
 		const segments = url.pathname.split('/').filter(Boolean);
 
 		if (segments.length === 0 || segments.length > 1) {
-			return new Response(JSON.stringify({ error: "Invalid request" }), { status: 400 })
+			return new Response(JSON.stringify({ error: "You need to provide a shortname, or `index`." }), { status: 400 })
 		}
 
 		const sql = await getConnection(env)
