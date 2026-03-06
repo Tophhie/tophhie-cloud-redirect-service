@@ -9,10 +9,6 @@ interface Env {
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
-		const requestId = crypto.randomUUID();
-
-		console.log(`[${requestId}] Received request: ${request.url}`);
-
 		const url = new URL(request.url)
 		const segments = url.pathname.split('/').filter(Boolean);
 
@@ -48,16 +44,16 @@ async function getConnection(env: Env) {
 async function logRequest(req: Request, env: Env, requestId: string, shortname: string, redirected_to: string | null, custom_result: string | null): Promise<void> {
 	const logObject = {
 		request_id: requestId,
-		originating_ip: req.headers.get("CF-Connecting-IP") || "",
-		user_agent: req.headers.get("User-Agent") || "",
-		originating_platform: req.headers.get("Sec-CH-UA-Platform")?.replace('\'', "") || "Unknown",
+		originating_ip: req.headers.get("CF-Connecting-IP") || "0.0.0.0",
+		user_agent: req.headers.get("User-Agent") || null,
+		originating_platform: req.headers.get("Sec-CH-UA-Platform")?.replace("\"", "") || "Unknown",
 		redirect_application: shortname,
 		redirected_to: redirected_to,
 		full_request_url: req.url,
 		request_method: req.method,
 		result: custom_result ? custom_result : (redirected_to ? "Redirected" : "Unknown"),
 		shortname_query: req.url.includes("?shortname=") ? new URL(req.url).searchParams.get("shortname") : null,
-		referrer: req.headers.get("Referer") || "",
+		referrer: req.headers.get("Referer") || null,
 		timestamp: new Date().toISOString(),
 	}
 	await env.LOGDB
