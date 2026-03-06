@@ -15,6 +15,13 @@
 			"id": "bc9a6d6680c346599ee1023225d66550"
 		}
 	],
+	"d1_databases": [
+		{
+			"binding": "LOGDB",
+			"database_name": "tc-redirect-logs",
+			"database_id": "116e3bf1-810d-439d-9216-7bfe674fcb66"
+		}
+	],
 	"routes": [
 		{
 			"pattern": "aka.tophhie.dev",

@@ -1,12 +1,18 @@
 import { createConnection, Connection } from "mysql2/promise"
 import { IRedirectIndex, IRedirectLink, IRedirectLinkPublic } from "./interfaces/interfaces";
+import { log } from "node:console";
 
 interface Env {
 	HYPERDRIVE: Hyperdrive;
+	LOGDB: D1Database;
 }
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
+		const requestId = crypto.randomUUID();
+
+		console.log(`[${requestId}] Received request: ${request.url}`);
+
 		const url = new URL(request.url)
 		const segments = url.pathname.split('/').filter(Boolean);
 
@@ -19,9 +25,9 @@ export default {
 		const query = url.searchParams.get("shortname")
 
 		if (shortname === "index") {
-			return await handleIndexRequest(sql, query || undefined)
+			return await handleIndexRequest(request, env, sql, query || undefined, ctx)
 		} else {
-			return await handleRedirectRequest(sql, shortname, ctx)
+			return await handleRedirectRequest(request, env, sql, shortname, ctx)
 		}
 	},
 } satisfies ExportedHandler<Env>;
@@ -39,27 +45,71 @@ async function getConnection(env: Env) {
 	return sql
 }
 
+async function logRequest(req: Request, env: Env, requestId: string, shortname: string, redirected_to: string | null, custom_result: string | null): Promise<void> {
+	const logObject = {
+		request_id: requestId,
+		originating_ip: req.headers.get("CF-Connecting-IP") || "",
+		user_agent: req.headers.get("User-Agent") || "",
+		originating_platform: req.headers.get("Sec-CH-UA-Platform")?.replace('\'', "") || "Unknown",
+		redirect_application: shortname,
+		redirected_to: redirected_to,
+		full_request_url: req.url,
+		request_method: req.method,
+		result: custom_result ? custom_result : (redirected_to ? "Redirected" : "Unknown"),
+		shortname_query: req.url.includes("?shortname=") ? new URL(req.url).searchParams.get("shortname") : null,
+		referrer: req.headers.get("Referer") || "",
+		timestamp: new Date().toISOString(),
+	}
+	await env.LOGDB
+	.prepare(`INSERT INTO request_logs 
+		(request_id, originating_ip, user_agent, originating_platform, redirect_application, redirected_to, full_request_url, request_method, result, shortname_query, referrer, timestamp) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	.bind(
+		logObject.request_id,
+		logObject.originating_ip,
+		logObject.user_agent,
+		logObject.originating_platform,
+		logObject.redirect_application,
+		logObject.redirected_to,
+		logObject.full_request_url,
+		logObject.request_method,
+		logObject.result,
+		logObject.shortname_query,
+		logObject.referrer,
+		logObject.timestamp
+	).run()
+}
+
 async function updateCount(sql: Connection, shortname: string): Promise<void> {
 	await sql.query(`UPDATE api_redirect_links SET used_count = used_count + 1 WHERE shortname = ?`, [shortname])
 }
 
-async function handleRedirectRequest(sql: Connection, shortname: string, ctx: ExecutionContext): Promise<Response> {
+async function handleRedirectRequest(req: Request, env: Env, sql: Connection, shortname: string, ctx: ExecutionContext): Promise<Response> {
 	ctx.waitUntil(updateCount(sql, shortname))
 
 	const redirectUrl = await fetchRedirectLink(sql, shortname)
 	if (!redirectUrl) {
+		ctx.waitUntil(
+			logRequest(req, env, crypto.randomUUID(), shortname, null, "Shortname not found")
+		)
 		return new Response(JSON.stringify({ error: "Shortname not found" }), { status: 404 })
 	}
+	ctx.waitUntil(
+		logRequest(req, env, crypto.randomUUID(), shortname, redirectUrl, "Redirected")
+	)
 	return Response.redirect(redirectUrl, 302)
 }
 
-async function handleIndexRequest(sql: Connection, query: string | undefined): Promise<Response> {
+async function handleIndexRequest(req: Request, env: Env, sql: Connection, query: string | undefined, ctx: ExecutionContext): Promise<Response> {
 	const redirectLinks = await fetchRedirectIndex(sql, query)
 	const responseData: IRedirectIndex = {
 		links_count: redirectLinks.length,
 		root_url: "https://aka.tophhie.cloud",
 		links: redirectLinks
 	}
+	ctx.waitUntil(
+		logRequest(req, env, crypto.randomUUID(), "index", null, "Index requested")
+	)
 	return new Response(JSON.stringify(responseData), { status: 200, headers: { "Content-Type": "application/json" } })
 }
 
