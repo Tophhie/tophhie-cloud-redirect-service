@@ -26,6 +26,10 @@
 		{
 			"pattern": "aka.tophhie.dev",
 			"custom_domain": true
+		},
+		{
+			"pattern": "aka.tophhie.cloud",
+			"custom_domain": true
 		}
 	],
 	"workers_dev": false
