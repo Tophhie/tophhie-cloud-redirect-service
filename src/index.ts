@@ -4,10 +4,17 @@ import { IRedirectIndex, IRedirectLink, IRedirectLinkPublic } from "./interfaces
 interface Env {
 	HYPERDRIVE: Hyperdrive;
 	LOGDB: D1Database;
+	DEFAULT_RATE_LIMITER: RateLimit;
 }
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
+
+		const connectingIp = request.headers.get("CF-Connecting-IP") || "Undefined";
+		const { success } = await env.DEFAULT_RATE_LIMITER.limit({ key: connectingIp });
+
+		if (!success) { return new Response(JSON.stringify({ error: "Too many requests. Rate limited exceeded for " + connectingIp + " ."}), { headers: { "Content-Type": "application/json" }, status: 429 }) }
+
 		const url = new URL(request.url)
 		const segments = url.pathname.split('/').filter(Boolean);
 
