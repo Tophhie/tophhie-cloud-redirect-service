@@ -14,5 +14,12 @@
 			"binding": "HYPERDRIVE",
 			"id": "bc9a6d6680c346599ee1023225d66550"
 		}
-	]
+	],
+	"routes": [
+		{
+			"pattern": "aka.tophhie.dev/*",
+			"zone_name": "tophhie.dev"
+		}
+	],
+	"workers_dev": false
 }
