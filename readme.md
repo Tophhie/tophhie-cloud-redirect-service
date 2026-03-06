@@ -118,6 +118,7 @@ When `shortname` query param is supplied, only that record is returned (if any).
 interface Env {
   HYPERDRIVE: Hyperdrive;   // MySQL connection details
   LOGDB: D1Database;        // D1 instance for logging
+  DEFAULT_RATE_LIMITER: RateLimit;  // rate limiter binding
 }
 ```
 
@@ -131,7 +132,19 @@ HYPERDRIVE_DATABASE=
 HYPERDRIVE_PORT=
 ```
 
-`wrangler.jsonc` already declares the two bindings used by the worker.
+`wrangler.jsonc` already declares the two bindings used by the worker.  The file also includes a `ratelimits` section:
+
+```jsonc
+"ratelimits": [
+  {
+    "name": "DEFAULT_RATE_LIMITER",
+    "namespace_id": "1001",
+    "simple": { "limit": 100, "period": 60 }
+  }
+]
+```
+
+This produces the `RateLimit` binding available as `env.DEFAULT_RATE_LIMITER`. Adjust the `limit`/`period` values as needed and rerun `wrangler deploy`.
 
 ---
 
@@ -156,6 +169,12 @@ npm test
   via `ctx.waitUntil()` to avoid blocking the response.
 - Logging is non‑blocking and stores metadata such as IP, UA, referrer, etc.
 - `nodejs_compat` flag enables the mysql2 client to work in the worker.
+- The code checks a per-IP rate limiter at the top of `fetch`; a 429
+  response is returned when the limit (configured under `ratelimits` in
+  `wrangler.jsonc`) is exceeded.
+- Requests are gated by a simple per-IP rate limiter; exceeding the configured
+  threshold returns HTTP 429. Configuration is located under `ratelimits` in
+  `wrangler.jsonc`.
 
 ---
 
