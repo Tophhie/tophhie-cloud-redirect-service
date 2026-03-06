@@ -21,7 +21,7 @@ export default {
 		if (shortname === "index") {
 			return await handleIndexRequest(sql, query || undefined)
 		} else {
-			return await handleRedirectRequest(sql, shortname)
+			return await handleRedirectRequest(sql, shortname, ctx)
 		}
 	},
 } satisfies ExportedHandler<Env>;
@@ -39,7 +39,13 @@ async function getConnection(env: Env) {
 	return sql
 }
 
-async function handleRedirectRequest(sql: Connection, shortname: string): Promise<Response> {
+async function updateCount(sql: Connection, shortname: string): Promise<void> {
+	await sql.query(`UPDATE api_redirect_links SET used_count = used_count + 1 WHERE shortname = ?`, [shortname])
+}
+
+async function handleRedirectRequest(sql: Connection, shortname: string, ctx: ExecutionContext): Promise<Response> {
+	ctx.waitUntil(updateCount(sql, shortname))
+
 	const redirectUrl = await fetchRedirectLink(sql, shortname)
 	if (!redirectUrl) {
 		return new Response(JSON.stringify({ error: "Shortname not found" }), { status: 404 })
