@@ -61,7 +61,7 @@ async function logRequest(req: Request, env: Env, requestId: string, shortname: 
 		timestamp: new Date().toISOString(),
 	}
 	await env.LOGDB
-	.prepare(`INSERT INTO request_logs 
+	.prepare(`INSERT INTO logs 
 		(request_id, originating_ip, user_agent, originating_platform, redirect_application, redirected_to, full_request_url, request_method, result, shortname_query, referrer, timestamp) 
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	.bind(
