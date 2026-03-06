@@ -12,7 +12,7 @@ export default {
 		const segments = url.pathname.split('/').filter(Boolean);
 
 		if (segments.length === 0 || segments.length > 1) {
-			return new Response(JSON.stringify({ error: "You need to provide a shortname, or `index`." }), { status: 400 })
+			return new Response(JSON.stringify({ error: "You need to provide a shortname, or `index`." }), { headers: { "Content-Type": "application/json" }, status: 400 })
 		}
 
 		const sql = await getConnection(env)
@@ -87,7 +87,7 @@ async function handleRedirectRequest(req: Request, env: Env, sql: Connection, sh
 		ctx.waitUntil(
 			logRequest(req, env, crypto.randomUUID(), shortname, null, "Shortname not found")
 		)
-		return new Response(JSON.stringify({ error: "Shortname not found" }), { status: 404 })
+		return new Response(JSON.stringify({ error: "Shortname not found" }), { headers: { "Content-Type": "application/json" }, status: 404 })
 	}
 	ctx.waitUntil(
 		logRequest(req, env, crypto.randomUUID(), shortname, redirectUrl, "Redirected")
