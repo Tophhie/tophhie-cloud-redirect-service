@@ -46,7 +46,7 @@ async function logRequest(req: Request, env: Env, requestId: string, shortname: 
 		request_id: requestId,
 		originating_ip: req.headers.get("CF-Connecting-IP") || "0.0.0.0",
 		user_agent: req.headers.get("User-Agent") || null,
-		originating_platform: req.headers.get("Sec-CH-UA-Platform")?.replace("\"", "") || "Unknown",
+		originating_platform: req.headers.get("Sec-CH-UA-Platform")?.replace(/"/g, "") || "Unknown",
 		redirect_application: shortname,
 		redirected_to: redirected_to,
 		full_request_url: req.url,
