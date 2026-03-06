@@ -33,6 +33,8 @@ async function getConnection(env: Env) {
 		password: env.HYPERDRIVE.password,
 		database: env.HYPERDRIVE.database,
 		port: env.HYPERDRIVE.port,
+
+		disableEval: true,
 	})
 	return sql
 }
