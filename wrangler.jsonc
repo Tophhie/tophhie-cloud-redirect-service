@@ -17,8 +17,8 @@
 	],
 	"routes": [
 		{
-			"pattern": "aka.tophhie.dev/*",
-			"zone_name": "tophhie.dev"
+			"pattern": "aka.tophhie.dev",
+			"custom_domain": true
 		}
 	],
 	"workers_dev": false
