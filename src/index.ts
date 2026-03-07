@@ -13,13 +13,19 @@ export default {
 		const connectingIp = request.headers.get("CF-Connecting-IP") || "Undefined";
 		const { success } = await env.DEFAULT_RATE_LIMITER.limit({ key: connectingIp });
 
-		if (!success) { return new Response(JSON.stringify({ error: "Too many requests. Rate limited exceeded for " + connectingIp + " ."}), { headers: { "Content-Type": "application/json" }, status: 429 }) }
+		if (!success) {
+			return new Response(JSON.stringify({ error: "Too many requests. Rate limited exceeded for " + connectingIp + "."}), { headers: { "Content-Type": "application/json" }, status: 429 }) 
+		}
 
 		const url = new URL(request.url)
 		const segments = url.pathname.split('/').filter(Boolean);
 
-		if (segments.length === 0 || segments.length > 1) {
-			return new Response(JSON.stringify({ error: "You need to provide a shortname, or `index`." }), { headers: { "Content-Type": "application/json" }, status: 400 })
+		if (segments.length === 0) {
+			return Response.redirect("https://aka.tophhie.cloud/index", 302)
+		}
+
+		if (segments.length > 1) {
+			return new Response(JSON.stringify({ error: "Too many URL segments. Please provide only one." }), { headers: { "Content-Type": "application/json" }, status: 400 })
 		}
 
 		const sql = await getConnection(env)
