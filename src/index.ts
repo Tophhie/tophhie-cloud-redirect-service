@@ -110,10 +110,10 @@ async function handleRedirectRequest(req: Request, env: Env, sql: Connection, sh
 }
 
 async function handleIndexRequest(req: Request, env: Env, sql: Connection, query: string | undefined, ctx: ExecutionContext): Promise<Response> {
-	const redirectLinks = await fetchRedirectIndex(sql, query)
+	const redirectLinks = await fetchRedirectIndex(sql, query, req.headers.get("Host"))
 	const responseData: IRedirectIndex = {
 		links_count: redirectLinks.length,
-		root_url: "https://aka.tophhie.cloud",
+		root_url: "https://" + (req.headers.get("Host") || "aka.tophhie.cloud"),
 		links: redirectLinks
 	}
 	ctx.waitUntil(
@@ -130,12 +130,12 @@ async function fetchRedirectLink(sql: Connection, shortname: string): Promise<st
 	return rows[0].redirect_url
 }
 
-async function fetchRedirectIndex(sql: Connection, query: string | undefined): Promise<IRedirectLinkPublic[]> {
+async function fetchRedirectIndex(sql: Connection, query: string | undefined, custom_host: string | null): Promise<IRedirectLinkPublic[]> {
 	var command: string;
 	if (query) {
-		command = `SELECT title, shortname, redirect_url, CONCAT('https://aka.tophhie.cloud/', shortname) AS short_url FROM api_redirect_links WHERE shortname = ? ORDER BY title ASC`
+		command = `SELECT title, shortname, redirect_url, CONCAT('${custom_host ? `https://${custom_host}/` : 'https://aka.tophhie.cloud/'}', shortname) AS short_url FROM api_redirect_links WHERE shortname = ? ORDER BY title ASC`
 	} else {
-		command = `SELECT title, shortname, redirect_url, CONCAT('https://aka.tophhie.cloud/', shortname) AS short_url FROM api_redirect_links WHERE indexed = 1 ORDER BY title ASC`
+		command = `SELECT title, shortname, redirect_url, CONCAT('${custom_host ? `https://${custom_host}/` : 'https://aka.tophhie.cloud/'}', shortname) AS short_url FROM api_redirect_links WHERE indexed = 1 ORDER BY title ASC`
 	}
 	const [rows] = await sql.query<IRedirectLinkPublic[]>(command, [query])
 	return rows
