@@ -21,7 +21,8 @@ export default {
 		const segments = url.pathname.split('/').filter(Boolean);
 
 		if (segments.length === 0) {
-			return Response.redirect("https://aka.tophhie.cloud/index", 302)
+			const requestHost = request.headers.get("Host") || "aka.tophhie.cloud";
+			return Response.redirect(`https://${requestHost}/index`, 302)
 		}
 
 		if (segments.length > 1) {
