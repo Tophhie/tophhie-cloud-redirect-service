@@ -8,37 +8,39 @@ interface Env {
 }
 
 const CANONICAL_HOST = "aka.tophhie.cloud";
+const ALLOWED_METHODS = new Set(["GET", "HEAD"]);
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const connectingIp = request.headers.get("CF-Connecting-IP") || "Undefined";
     const { success } = await env.DEFAULT_RATE_LIMITER.limit({ key: connectingIp });
     if (!success) {
-      return new Response(
-        JSON.stringify({ error: "Too many requests." }),
-        { headers: { "Content-Type": "application/json" }, status: 429 }
-      );
+      return jsonResponse({ error: "Too many requests." }, 429);
+    }
+
+    if (!ALLOWED_METHODS.has(request.method)) {
+      return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "GET, HEAD" });
     }
 
     const url = new URL(request.url);
     const segments = url.pathname.split("/").filter(Boolean);
 
+    if (segments.length === 0) {
+      return Response.redirect(`https://${CANONICAL_HOST}/index`, 302);
+    }
+
+    if (segments.length > 1) {
+      return jsonResponse({ error: "Too many URL segments. Please provide only one." }, 400);
+    }
+
+    const shortname = segments[0];
+    if (!/^[a-zA-Z0-9_-]+$/.test(shortname)) {
+      return jsonResponse({ error: "Invalid shortname format" }, 400);
+    }
+
     const sql = await getConnection(env);
     try {
-      if (segments.length === 0) {
-        return Response.redirect(`https://${CANONICAL_HOST}/index`, 302);
-      }
-
-      if (segments.length > 1) {
-        return new Response(
-          JSON.stringify({ error: "Too many URL segments. Please provide only one." }),
-          { headers: { "Content-Type": "application/json" }, status: 400 }
-        );
-      }
-
-      const shortname = segments[0];
       const query = url.searchParams.get("shortname");
-
       if (shortname === "index" || shortname === "private-index") {
         return await handleIndexRequest(
           request,
@@ -49,20 +51,28 @@ export default {
           ctx,
           shortname === "index"
         );
-      } else {
-        return await handleRedirectRequest(
-          request,
-          env,
-          sql,
-          shortname,
-          ctx
-        );
       }
+
+      return await handleRedirectRequest(request, env, sql, shortname, ctx);
+    } catch (error) {
+      console.error("Request handling failed", error);
+      ctx.waitUntil(logRequest(request, env, crypto.randomUUID(), shortname, null, "Worker error"));
+      return jsonResponse({ error: "Service temporarily unavailable" }, 503);
     } finally {
       await sql.end();
     }
   },
 } satisfies ExportedHandler<Env>;
+
+function jsonResponse(body: unknown, status: number, extraHeaders: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
+  });
+}
 
 async function getConnection(env: Env) {
   return createConnection({
@@ -140,20 +150,14 @@ async function handleRedirectRequest(
   const redirectUrl = await fetchRedirectLink(sql, shortname);
   if (!redirectUrl) {
     ctx.waitUntil(logRequest(req, env, crypto.randomUUID(), shortname, null, "Shortname not found"));
-    return new Response(
-      JSON.stringify({ error: "Shortname not found" }),
-      { headers: { "Content-Type": "application/json" }, status: 404 }
-    );
+    return jsonResponse({ error: "Shortname not found" }, 404);
   }
 
   try {
     new URL(redirectUrl);
   } catch {
     ctx.waitUntil(logRequest(req, env, crypto.randomUUID(), shortname, null, "Invalid redirect target"));
-    return new Response(
-      JSON.stringify({ error: "Invalid redirect target" }),
-      { headers: { "Content-Type": "application/json" }, status: 400 }
-    );
+    return jsonResponse({ error: "Invalid redirect target" }, 400);
   }
 
   ctx.waitUntil(updateCount(sql, shortname));
@@ -176,13 +180,9 @@ async function handleIndexRequest(
     root_url: `https://${baseHost}`,
     links: redirectLinks,
   };
-  ctx.waitUntil(
-    logRequest(req, env, crypto.randomUUID(), "index", null, "Index requested")
-  );
-  return new Response(JSON.stringify(responseData), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  const indexRoute = publicIndex ? "index" : "private-index";
+  ctx.waitUntil(logRequest(req, env, crypto.randomUUID(), indexRoute, null, "Index requested"));
+  return jsonResponse(responseData, 200);
 }
 
 async function fetchRedirectLink(
@@ -204,8 +204,8 @@ async function fetchRedirectIndex(
   publicIndex: boolean = true
 ): Promise<IRedirectLinkPublic[]> {
   let command: string;
-  let params: any[] = [];
-  let publicClause = publicIndex ? "AND public = 1" : "";
+  const params: string[] = [];
+  const publicClause = publicIndex ? "AND public = 1" : "";
   if (query) {
     command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE shortname = ? ${publicClause} AND indexed = 1 ORDER BY title ASC`;
     params.push(query);
@@ -213,8 +213,10 @@ async function fetchRedirectIndex(
     command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE indexed = 1 ${publicClause} ORDER BY title ASC`;
   }
   const [rows] = await sql.query<IRedirectLink[]>(command, params);
-  return (rows as any).map((row: any) => ({
-    ...row,
+  return rows.map((row) => ({
+    title: row.title,
+    shortname: row.shortname,
+    redirect_url: row.redirect_url,
     short_url: `https://${baseHost}/${row.shortname}`,
   }));
 }

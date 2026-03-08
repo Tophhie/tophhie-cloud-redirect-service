@@ -6,7 +6,7 @@ export interface IRedirectIndex {
     links: IRedirectLinkPublic[];
 }
 
-export interface IRedirectLinkPublic extends RowDataPacket {
+export interface IRedirectLinkPublic {
     title: string;
     shortname: string;
     redirect_url: string;
