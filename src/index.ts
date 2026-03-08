@@ -206,7 +206,7 @@ async function fetchRedirectIndex(
     command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE shortname = ? AND public = 1 AND indexed = 1 ORDER BY title ASC`;
     params.push(query);
   } else {
-    command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE indexed = 1 AND public = 1 AND ORDER BY title ASC`;
+    command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE indexed = 1 AND public = 1 ORDER BY title ASC`;
   }
   const [rows] = await sql.query<IRedirectLink[]>(command, params);
   return (rows as any).map((row: any) => ({
