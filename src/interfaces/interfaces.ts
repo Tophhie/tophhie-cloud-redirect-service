@@ -21,5 +21,6 @@ export interface IRedirectLink extends RowDataPacket {
     redirect_url: string;
     used_count: number;
     indexed: boolean;
+    public: boolean;
     last_updated: Date;
 }
