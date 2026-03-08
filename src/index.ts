@@ -12,14 +12,14 @@ const ALLOWED_METHODS = new Set(["GET", "HEAD"]);
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    if (!ALLOWED_METHODS.has(request.method)) {
-      return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "GET, HEAD" });
-    }
-
     const connectingIp = request.headers.get("CF-Connecting-IP") || "Undefined";
     const { success } = await env.DEFAULT_RATE_LIMITER.limit({ key: connectingIp });
     if (!success) {
       return jsonResponse({ error: "Too many requests." }, 429);
+    }
+
+    if (!ALLOWED_METHODS.has(request.method)) {
+      return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "GET, HEAD" });
     }
 
     const url = new URL(request.url);
@@ -160,7 +160,7 @@ async function handleRedirectRequest(
     return jsonResponse({ error: "Invalid redirect target" }, 400);
   }
 
-  await updateCount(sql, shortname);
+  ctx.waitUntil(updateCount(sql, shortname));
   ctx.waitUntil(logRequest(req, env, crypto.randomUUID(), shortname, redirectUrl, "Redirected"));
   return Response.redirect(redirectUrl, 302);
 }
