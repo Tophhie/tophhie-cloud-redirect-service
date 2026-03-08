@@ -188,7 +188,7 @@ async function fetchRedirectLink(
   shortname: string
 ): Promise<string | null> {
   const [rows] = await sql.query<IRedirectLink[]>(
-    `SELECT redirect_url FROM api_redirect_links WHERE shortname = ?`,
+    `SELECT redirect_url FROM api_redirect_links WHERE shortname = ? and indexed = 1`,
     [shortname]
   );
   if (rows.length === 0) return null;
@@ -203,10 +203,10 @@ async function fetchRedirectIndex(
   let command: string;
   let params: any[] = [];
   if (query) {
-    command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE shortname = ? AND public = 1 ORDER BY title ASC`;
+    command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE shortname = ? AND public = 1 AND indexed = 1 ORDER BY title ASC`;
     params.push(query);
   } else {
-    command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE indexed = 1 AND public = 1 ORDER BY title ASC`;
+    command = `SELECT title, shortname, redirect_url FROM api_redirect_links WHERE indexed = 1 AND public = 1 AND ORDER BY title ASC`;
   }
   const [rows] = await sql.query<IRedirectLink[]>(command, params);
   return (rows as any).map((row: any) => ({
