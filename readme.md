@@ -1,184 +1,133 @@
-# 📄 `tophhie-cloud-redirect-service`
+# tophhie-cloud-redirect-service
 
-A simple **Cloudflare Worker** that powers `aka.tophhie.cloud` (and dev) –  
-shortname‑based redirects with a public index and request logging.
+Cloudflare Worker that serves short-link redirects for `aka.tophhie.cloud` and `aka.tophhie.dev`.
 
----
+## What it does
 
-## 🧠 Overview
+- `GET /` redirects to `https://aka.tophhie.cloud/index`
+- `GET /:shortname` looks up `shortname` in MySQL (via Hyperdrive)
+- If found, returns `302` to `redirect_url`
+- If missing, returns `404` JSON: `{"error":"Shortname not found"}`
+- `GET /index` returns indexed links
+- `GET /index?shortname=foo` returns one matching link (if found)
+- Every request is logged to D1 asynchronously
+- Request limits are enforced with a Cloudflare `RateLimit` binding
 
-- Requests to `/SHORTNAME` are looked up in a **Hyperdrive (MySQL)** database.
-  - If found → 302 redirect to `redirect_url`.
-  - If missing → 404 JSON error.
-- `/index` returns JSON describing all indexed links (or a single shortname when
-  queried).
-- Each request is asynchronously logged into a **D1** database.
-- The Worker uses `mysql2/promise` on the Node‑compatibility runtime.
+## Runtime and bindings
 
----
+Worker entrypoint: `src/index.ts`
 
-## 🔧 Project structure
-
-```
-.
-├─ src/
-│  ├─ index.ts            ← Worker entrypoint
-│  └─ interfaces/…
-├─ package.json
-├─ wrangler.jsonc         ← bindings, routes, flags
-├─ tsconfig.json
-└─ vitest.config.mts
-```
-
----
-
-## 🚀 Getting started
-
-### Prerequisites
-
-- [Cloudflare account](https://workers.cloudflare.com/)
-- `wrangler` CLI (`npm install -g wrangler`)
-- A **Hyperdrive** MySQL instance containing `api_redirect_links`
-  (schema inferred from `src/interfaces/interfaces.ts`)
-- A **D1 database** for logs (created/defined in `wrangler.jsonc`)
-
-### Local development
-
-```bash
-# install deps
-npm install
-
-# build types for bindings
-npm run cf-typegen
-
-# start the worker locally
-npm run dev          # serves on http://localhost:8787 by default
-```
-
-The `wrangler dev` session will simulate Hyperdrive and D1 via the bindings
-you configure in your `wrangler.toml`/`.env` (set `HYPERDRIVE_*` vars).
-
-### Deploy
-
-```bash
-npm run deploy       # runs `wrangler deploy`
-// optionally specify --env production, --env staging, etc.
-```
-
-> ✅ Make sure `wrangler.jsonc` contains your custom domains and your
->   `hyperdrive`/`d1_databases` bindings are correct before deploying.
-
----
-
-## 📡 API
-
-### Redirect
-
-```
-GET https://aka.tophhie.cloud/:shortname
-```
-
-- **302** to the `redirect_url` stored under `shortname`.
-- **404** with `{ error: "Shortname not found" }` when missing.
-
-### Index
-
-```
-GET https://aka.tophhie.cloud/index
-GET https://aka.tophhie.cloud/index?shortname=foo
-```
-
-Response body (`IRedirectIndex`):
-
-```json
-{
-  "links_count": 42,
-  "root_url": "https://aka.tophhie.cloud",
-  "links": [
-    {
-      "title": "My service",
-      "shortname": "service",
-      "redirect_url": "https://example.com/…",
-      "short_url": "https://aka.tophhie.cloud/service"
-    },
-    …
-  ]
-}
-```
-
-When `shortname` query param is supplied, only that record is returned (if any).
-
----
-
-## 🔒 Environment & bindings
-
-`Env` interface used in `src/index.ts`:
+`Env` bindings used by the Worker:
 
 ```ts
 interface Env {
-  HYPERDRIVE: Hyperdrive;   // MySQL connection details
-  LOGDB: D1Database;        // D1 instance for logging
-  DEFAULT_RATE_LIMITER: RateLimit;  // rate limiter binding
+  HYPERDRIVE: Hyperdrive;
+  LOGDB: D1Database;
+  DEFAULT_RATE_LIMITER: RateLimit;
 }
 ```
 
-Set the following environment variables (typical for Hyperdrive):
+Configured in `wrangler.jsonc`:
 
-```
-HYPERDRIVE_HOST=
-HYPERDRIVE_USER=
-HYPERDRIVE_PASSWORD=
-HYPERDRIVE_DATABASE=
-HYPERDRIVE_PORT=
-```
+- `hyperdrive` binding: `HYPERDRIVE`
+- `d1_databases` binding: `LOGDB`
+- `ratelimits` binding: `DEFAULT_RATE_LIMITER` (`100` requests per `60` seconds per key/IP)
+- `compatibility_flags`: `nodejs_compat` (required for `mysql2`)
+- custom domains:
+  - `aka.tophhie.dev`
+  - `aka.tophhie.cloud`
 
-`wrangler.jsonc` already declares the two bindings used by the worker.  The file also includes a `ratelimits` section:
+After changing bindings in `wrangler.jsonc`, regenerate Worker types:
 
-```jsonc
-"ratelimits": [
-  {
-    "name": "DEFAULT_RATE_LIMITER",
-    "namespace_id": "1001",
-    "simple": { "limit": 100, "period": 60 }
-  }
-]
+```bash
+npm run cf-typegen
 ```
 
-This produces the `RateLimit` binding available as `env.DEFAULT_RATE_LIMITER`. Adjust the `limit`/`period` values as needed and rerun `wrangler deploy`.
+## Data model expectations
 
----
+MySQL table expected by redirect/index queries:
 
-## 🧪 Testing
+- table: `api_redirect_links`
+- columns used:
+  - `title`
+  - `shortname`
+  - `redirect_url`
+  - `used_count`
+  - `indexed`
 
-Basic tests can be added using [Vitest](https://vitest.dev/).  
-The repo includes `vitest.config.mts` and the Cloudflare pool plugin.
+D1 table expected by request logging:
 
-Run:
+- table: `logs`
+- columns used:
+  - `request_id`
+  - `originating_ip`
+  - `user_agent`
+  - `originating_platform`
+  - `redirect_application`
+  - `redirected_to`
+  - `full_request_url`
+  - `request_method`
+  - `result`
+  - `shortname_query`
+  - `referrer`
+  - `timestamp`
+
+## Local development
+
+```bash
+npm install
+npm run cf-typegen
+npm run dev
+```
+
+`npm run dev` starts `wrangler dev`.
+
+## Deploy
+
+```bash
+npm run deploy
+```
+
+This runs `wrangler deploy` using `wrangler.jsonc`.
+
+## API behavior
+
+### `GET /`
+
+- `302` redirect to canonical index URL (`https://aka.tophhie.cloud/index`)
+
+### `GET /index`
+
+- Returns:
+  - `200` JSON
+  - shape:
+
+```json
+{
+  "links_count": 0,
+  "root_url": "https://aka.tophhie.cloud",
+  "links": []
+}
+```
+
+### `GET /index?shortname=<name>`
+
+- Returns only rows matching the requested shortname
+
+### `GET /:shortname`
+
+- `302` redirect when found
+- `404` JSON when not found
+- `400` JSON when stored redirect URL is invalid
+
+### Invalid path shape
+
+- Requests with more than one URL segment (for example `/a/b`) return `400` JSON
+
+## Test command
 
 ```bash
 npm test
 ```
 
-(There are currently no tests; add some to exercise index/redirect logic.)
-
----
-
-## 📌 Notes & tips
-
-- `updateCount` increments a `used_count` field in Hyperdrive – executed
-  via `ctx.waitUntil()` to avoid blocking the response.
-- Logging is non‑blocking and stores metadata such as IP, UA, referrer, etc.
-- `nodejs_compat` flag enables the mysql2 client to work in the worker.
-- The code checks a per-IP rate limiter at the top of `fetch`; a 429
-  response is returned when the limit (configured under `ratelimits` in
-  `wrangler.jsonc`) is exceeded.
-- Requests are gated by a simple per-IP rate limiter; exceeding the configured
-  threshold returns HTTP 429. Configuration is located under `ratelimits` in
-  `wrangler.jsonc`.
-
----
-
-Feel free to extend with authentication, management endpoints, or a UI
-around the index.
-
-Happy redirecting! 🌀
+Vitest is configured, but this repo currently has no test files.
